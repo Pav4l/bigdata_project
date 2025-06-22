@@ -1,0 +1,3 @@
+user_id,changed_at,changed_by,field_changed,old_value,new_value
+1,2025-06-21 22:24:17.471779,user,name,Иван Иванов,Иван Петров
+1,2025-06-21 22:24:17.471779,user,email,ivan@example.com,petrov@example.com
