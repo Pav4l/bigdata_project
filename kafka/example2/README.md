@@ -20,16 +20,18 @@ CREATE TABLE IF NOT EXISTS user_logins (
     id SERIAL PRIMARY KEY,
     username TEXT,
     event_type TEXT,
-    event_time TIMESTAMP);
+    event_time TIMESTAMP,
+    sent_to_kafka BOOLEAN DEFAULT FALSE
+)
 ```
 
 Заполним таблицу user_logins.
 
 ```sql
-INSERT INTO user_logins (username, event_type, event_time)
+INSERT INTO user_logins (username, event_type, event_time, sent_to_kafka)
 VALUES
-('alice', 'login', now()),
-('bob', 'register', now());
+('alice', 'login', now(), False),
+('bob', 'register', now(), False);
 ```
 
 Проверим, что добавлен флаг sent_to_kafka в таблице user_logins БД PostgreSQL.
