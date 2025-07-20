@@ -1,0 +1,34 @@
+version: '3.7'
+
+services:
+  clickhouse:
+    image: yandex/clickhouse-server:latest
+    container_name: clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123" # HTTP порт для ClickHouse
+      - "9000:9000" # порт для ClickHouse native client
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse_config/users.d:/etc/clickhouse-server/users.d
+      #- ./users.xml:/etc/clickhouse-server/users.d/custom_users.xml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000" # Порт для веб-интерфейса Grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin # Логин администратора Grafana
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Пароль администратора Grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - clickhouse
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  grafana_data:
