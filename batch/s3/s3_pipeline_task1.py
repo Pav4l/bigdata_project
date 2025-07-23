@@ -4,6 +4,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from aiobotocore.session import get_session
 from dotenv import load_dotenv
+import aiofiles
 
 load_dotenv()
 
@@ -30,9 +31,12 @@ class AsyncObjectStorage:
     async def fetch_file(self, remote_name: str, local_target: str):
         async with self._connect() as remote:
             response = await remote.get_object(Bucket=self._bucket, Key=remote_name)
-            body = await response["Body"].read()
-            with open(local_target, "wb") as out:
-                out.write(body)
+            async with aiofiles.open(local_target, "wb") as out:
+                while True:
+                    chunk = await response["Body"].read(8192)
+                    if not chunk:
+                        break
+                    await out.write(chunk)
 
     async def remove_file(self, remote_name: str):
         async with self._connect() as remote:
@@ -41,13 +45,21 @@ class AsyncObjectStorage:
     async def send_file(self, local_path: str):
         filename = os.path.basename(local_path)
         async with self._connect() as remote:
-            with open(local_path, "rb") as f:
-                await remote.put_object(Bucket=self._bucket, Key=filename, Body=f)
+            async with aiofiles.open(local_path, "rb") as f:
+                data = await f.read()
+                await remote.put_object(Bucket=self._bucket, Key=filename, Body=data)
 
     async def list_files(self):
         async with self._connect() as remote:
-            response = await remote.list_objects_v2(Bucket=self._bucket)
-            return [obj["Key"] for obj in response.get("Contents", [])]
+            paginator = remote.get_paginator("list_objects_v2")
+            page_iterator = paginator.paginate(Bucket=self._bucket)
+
+            files = []
+            async for page in page_iterator:
+                contents = page.get("Contents", [])
+                files.extend(obj["Key"] for obj in contents)
+
+            return files
 
     async def file_exists(self, filename: str) -> bool:
         async with self._connect() as remote:

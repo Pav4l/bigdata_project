@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import asyncio
 import os
 import shutil
@@ -12,15 +10,19 @@ from dotenv import load_dotenv
 from aiobotocore.session import get_session
 from contextlib import asynccontextmanager
 
+# Загружаем переменные окружения
 load_dotenv()
 
+# Константы
 WATCH_DIR = Path("watched")
 ARCHIVE_DIR = Path("archive")
 LOG_FILE = Path("pipeline.log")
 
+# Создание директорий
 WATCH_DIR.mkdir(exist_ok=True)
 ARCHIVE_DIR.mkdir(exist_ok=True)
 
+# Настройка логгера
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
@@ -59,7 +61,7 @@ class AsyncS3:
             logging.info("📝 Log uploaded")
 
 
-async def process_file(file_path: Path):
+async def process_file(file_path: Path, s3: AsyncS3):
     try:
         logging.info(f"📂 Processing: {file_path.name}")
         df = pd.read_csv(file_path)
@@ -67,7 +69,6 @@ async def process_file(file_path: Path):
         temp_file = file_path.with_name(f"filtered_{file_path.name}")
         filtered.to_csv(temp_file, index=False)
 
-        s3 = AsyncS3()
         await s3.upload_file(temp_file)
         await s3.upload_log()
 
@@ -81,24 +82,25 @@ async def process_file(file_path: Path):
         logging.error(f"❌ Error processing {file_path.name}: {e}")
 
 
-async def watch_folder():
+async def process_existing_files(s3: AsyncS3):
+    logging.info("🔎 Checking for existing CSV files in 'watched/'...")
+    for file in WATCH_DIR.glob("*.csv"):
+        await process_file(file, s3)
+
+
+async def watch_folder(s3: AsyncS3):
     logging.info("👀 Watching 'watched/' folder for new CSV files...")
     async for changes in awatch(WATCH_DIR):
         for change, path_str in changes:
             path = Path(path_str)
             if path.suffix == ".csv" and path.parent == WATCH_DIR:
-                await process_file(path)
-
-
-async def process_existing_files():
-    logging.info("🔎 Checking for existing CSV files in 'watched/'...")
-    for file in WATCH_DIR.glob("*.csv"):
-        await process_file(file)
+                await process_file(path, s3)
 
 
 async def main():
-    await process_existing_files()
-    await watch_folder()
+    s3 = AsyncS3()
+    await process_existing_files(s3)
+    await watch_folder(s3)
 
 
 if __name__ == "__main__":
