@@ -1,7 +1,6 @@
 .idea/
 venv/
 .env
-/*.csv
-**/*.csv
+batch/s3/big_file.csv
 /*.log
 **/*.log
