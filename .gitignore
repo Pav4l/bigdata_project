@@ -4,3 +4,4 @@ venv/
 batch/s3/big_file.csv
 /*.log
 **/*.log
+__pycache__

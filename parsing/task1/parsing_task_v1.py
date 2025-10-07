@@ -1,13 +1,13 @@
-import asyncio
 import os
 import time
 import random
-from aiobotocore.session import get_session
-from contextlib import asynccontextmanager
+from pathlib import Path
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-import aiofiles
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 
 # =====================
@@ -20,25 +20,28 @@ CONFIG = {
     "max_retries": 3             # число повторных попыток при ошибке
 }
 
-load_dotenv()
+load_dotenv()  # загрузим .env (key_id, secret_key и т.п.)
+
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def fetch_page(url):
+def fetch_page(url: str) -> str | None:
     """Загружает страницу с обработкой ошибок и повторными попытками."""
     for attempt in range(CONFIG["max_retries"]):
         try:
-            response = requests.get(url, headers=CONFIG["headers"], timeout=10)
-            if response.status_code == 200:
-                return response.text
+            resp = requests.get(url, headers=CONFIG["headers"], timeout=10)
+            if resp.status_code == 200:
+                return resp.text
             else:
-                print(f"Ошибка {response.status_code}, повтор {attempt+1}")
+                print(f"Ошибка {resp.status_code}, повтор {attempt+1}")
         except requests.exceptions.RequestException as e:
             print(f"Ошибка соединения: {e}, попытка {attempt+1}")
         time.sleep(2)
     return None
 
 
-def parse_page(html):
+def parse_page(html: str) -> list[dict]:
     """Парсит HTML и возвращает список книг со страницы."""
     soup = BeautifulSoup(html, "html.parser")
     books = []
@@ -56,7 +59,7 @@ def parse_page(html):
     return books
 
 
-def crawl_site():
+def crawl_site() -> list[dict]:
     """Обходит все страницы каталога и собирает данные."""
     all_books = []
     page_num = 1
@@ -80,11 +83,12 @@ def crawl_site():
     return all_books
 
 
-def save_to_csv(data, filename="books.csv"):
-    """Сохраняет данные в CSV и делает простую агрегацию."""
+def save_to_csv(data: list[dict], filename: str = "books.csv") -> Path:
+    """Сохраняет данные в CSV и делает простую агрегацию. Возвращает путь к файлу."""
     df = pd.DataFrame(data)
-    df.to_csv(filename, index=False, encoding="utf-8")
-    print(f"Данные сохранены в {filename}")
+    output_path = OUTPUT_DIR / filename
+    df.to_csv(output_path, index=False, encoding="utf-8")
+    print(f"Данные сохранены в {output_path}")
 
     # Проверка целостности: сколько строк и уникальных названий
     print("Всего записей:", len(df))
@@ -93,53 +97,54 @@ def save_to_csv(data, filename="books.csv"):
     # Пример агрегации: топ-5 самых частых цен
     print(df['price'].value_counts().head())
 
+    return output_path
 
-class AsyncObjectStorage:
-    def __init__(self, *, key_id: str, secret: str,
-                 endpoint: str, container: str):
-        self._auth = {
-            "aws_access_key_id": key_id,
-            "aws_secret_access_key": secret,
-            "endpoint_url": endpoint,
-        }
+
+# ====== Sync storage (boto3) ======
+class SyncObjectStorage:
+    def __init__(self, *, key_id: str, secret: str, endpoint: str, container: str):
+        # проверка аргументов
+        if not key_id or not secret:
+            raise RuntimeError("AWS credentials are required (key_id, secret_key).")
+
+        # создаём клиент boto3 с указанием endpoint (Selectel S3 совместимый)
+        self._client = boto3.client(
+            's3',
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret,
+            endpoint_url=endpoint
+        )
         self._bucket = container
-        self._session = get_session()
 
-    @asynccontextmanager
-    async def _connect(self):
-        async with self._session.create_client("s3",
-                                               **self._auth) as connection:
-            yield connection
+    def upload_file(self, local_path: str, remote_name: str | None = None):
+        """Загружает файл в S3-совместимое хранилище."""
+        if remote_name is None:
+            remote_name = Path(local_path).name
 
-    async def send_file(self, local_path: str):
-        """Загружает файл в Selectel Object Storage"""
-        filename = os.path.basename(local_path)
-        async with self._connect() as remote:
-            async with aiofiles.open(local_path, "rb") as f:
-                data = await f.read()
-                await remote.put_object(Bucket=self._bucket,
-                                        Key=filename, Body=data)
+        try:
+            # Используем upload_file (эффективно для больших файлов)
+            self._client.upload_file(Filename=local_path, Bucket=self._bucket, Key=remote_name)
+            print(f"✅ Uploaded {local_path} -> s3://{self._bucket}/{remote_name}")
+        except (BotoCoreError, ClientError) as e:
+            print(f"Ошибка при upload: {e}")
+            raise
 
 
-async def upload_to_selectel(local_file: str):
+def upload_to_selectel_sync(local_file: str):
     key = os.getenv("key_id")
     secret = os.getenv("secret_key")
+    endpoint = "https://s3.ru-7.storage.selcloud.ru"
+    container = "data-engineer-practice-pavel3"
 
     if not key or not secret:
         raise RuntimeError("❌ Не найдены ключи доступа. Проверьте .env (key_id, secret_key)")
 
-    storage = AsyncObjectStorage(
-        key_id=key,
-        secret=secret,
-        endpoint="https://s3.ru-7.storage.selcloud.ru",
-        container="data-engineer-practice-pavel3"  # контейнер Selectel
-    )
-
-    await storage.send_file(local_file)
-    print(f"✅ Файл {local_file} успешно загружен в Selectel.")
+    storage = SyncObjectStorage(key_id=key, secret=secret, endpoint=endpoint, container=container)
+    storage.upload_file(local_file)
 
 
 if __name__ == "__main__":
     books_data = crawl_site()
-    save_to_csv(books_data)
-    asyncio.run(upload_to_selectel("books.csv"))
+    csv_path = save_to_csv(books_data, filename="books.csv")
+    # синхронная загрузка
+    upload_to_selectel_sync(str(csv_path))
