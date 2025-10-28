@@ -1,0 +1,23 @@
+# Базовый образ Python
+FROM python:3.11-slim
+
+# Устанавливаем системные зависимости
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Задаем рабочую директорию
+WORKDIR /app
+
+# Копируем только файлы зависимостей для кеширования
+COPY requirements.txt .
+
+# Устанавливаем Python-зависимости
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем весь проект
+COPY . .
+
+# Указываем Scrapy как точку входа (можно переопределить в docker-compose)
+CMD ["scrapy", "crawl", "my_spider"]

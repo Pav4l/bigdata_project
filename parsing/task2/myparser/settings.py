@@ -1,10 +1,12 @@
+import os
+
 BOT_NAME = "myparser"
 
 SPIDER_MODULES = ["myparser.spiders"]
 NEWSPIDER_MODULE = "myparser.spiders"
 
 # --- Настройки базы данных PostgreSQL ---
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/myparser_db"
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@db:5432/myparser_db")
 
 # --- Подключаем middleware ---
 DOWNLOADER_MIDDLEWARES = {

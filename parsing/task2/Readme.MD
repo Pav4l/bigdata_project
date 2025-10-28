@@ -20,6 +20,7 @@
 
 ## 📁 Структура проекта
 
+```
 myparser/
 │
 ├── scrapy.cfg
@@ -36,39 +37,48 @@ myparser/
 └── spiders/
 ├── init.py
 └── my_spider.py
+```
 
 ## 🚀 Запуск проекта
 
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone https://github.com/yourusername/myparser.git
-cd myparser
+git clone https://github.com/Pav4l/bigdata_project/tree/main/parsing/task2/myparser.git
+cd bigdata_project/parsing/task2/myparser
 ```
 
-### 2. Установить зависимости (если не через Docker)
+### 2. Запуск контейнеров 
 
 ```bash
-pip install -r requirements.txt
+docker compose up -d
 ```
 
-### 3. После запуска будут доступны сервисы:
-
-| Сервис             | URL / Порт                                     | Логин / Пароль        |
-| ------------------ | ---------------------------------------------- | --------------------- |
-| PostgreSQL         | `localhost:5432`                               | `postgres / postgres` |
-| pgAdmin            | [http://localhost:5050](http://localhost:5050) | `admin@local / admin` |
-| Selenium WebDriver | `http://localhost:4444/wd/hub`                 | —                     |
-
-### 4. Настроить подключение в settings.py
+### 3. Настроить подключение в settings.py
 
 ```python
 DATABASE_URL = "postgresql://postgres:postgres@db:5432/myparser_db"
 ```
 
-### 5. Запуск паука
+### 4. Запуск паука (из Docker)
 ```bash
-scrapy crawl my_spider
+docker-compose exec scrapy bash
+# Запуск парсинга
+scrapy crawl my_spider -O result.json
+```
+
+### Полезные команды
+```bash
+# Остановить все контейнеры
+docker compose down 
+
+#Удалить все контейнеры и тома (чистый перезапуск)
+docker compose down -v
+docker compose up -d
+
+# Посмотреть логи
+docker compose logs -f scrapy
+
 ```
 
 Парсер:

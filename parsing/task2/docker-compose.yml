@@ -1,14 +1,11 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:15
     container_name: myparser_db
     restart: always
+    env_file: "./.env"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: myparser_db
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
@@ -20,9 +17,7 @@ services:
     image: dpage/pgadmin4
     container_name: myparser_pgadmin
     restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@local
-      PGADMIN_DEFAULT_PASSWORD: admin
+    env_file: "./.env"
     ports:
       - "5050:80"
     depends_on:
@@ -31,14 +26,35 @@ services:
       - myparser_network
 
   selenium-chrome:
-    image: selenium/standalone-chrome:latest
-    container_name: myparser_selenium
+    image: selenium/standalone-chrome:4.37.0
+    container_name: selenium-chrome
     restart: always
     shm_size: 2gb
     ports:
       - "4444:4444"
     networks:
       - myparser_network
+
+  scrapy:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.scrapy
+    container_name: myparser_scrapy
+    command: >
+      bash -c "echo '⏳ Waiting for Selenium...' && 
+               sleep 10 && 
+               scrapy crawl my_spider -s LOG_LEVEL=INFO"
+    depends_on:
+      - selenium-chrome
+      - db
+    env_file: "./.env"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/myparser_db
+    
+    networks:
+      - myparser_network
+    volumes:
+      - .:/app
 
 volumes:
   pg_data:

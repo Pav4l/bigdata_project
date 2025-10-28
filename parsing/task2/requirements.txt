@@ -1,5 +1,5 @@
 # Scrapy core
-scrapy==2.11.2
+scrapy==2.13.3
 
 # Работа с PostgreSQL через SQLAlchemy
 SQLAlchemy==2.0.35
